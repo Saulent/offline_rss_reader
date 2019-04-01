@@ -11,6 +11,14 @@ using ClosedXML.Excel;
 using Dapper;
 using Microsoft.Win32;
 using System.IO.Compression;
+using System.Net;
+using System.ServiceModel.Syndication;
+using System.Text;
+using System.Windows.Controls;
+using System.Xml;
+using Ionic.Zip;
+using SaveOptions = ClosedXML.Excel.SaveOptions;
+
 
 namespace second_course
 {
@@ -20,41 +28,38 @@ namespace second_course
         {
             InitializeComponent();
             TextBlockSettingsHeader.Text = this.Title;
-
-            SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
             
-            ListBoxSources.ItemsSource = connection.Query<NewsSource>("select * from " + Consts.NewSourcesTableName);
+            var t = DataBase.LoadNewsSources();
+            ListBoxSources.ItemsSource = t;
         }
 
         private void HeaderSettingsRectangle_OnMouseDown(object sender, MouseButtonEventArgs e)
         {
             this.DragMove();
         }
-
         private void ButtonSettingsClose_OnMouseUp(object sender, MouseButtonEventArgs e)
         {
-            DataBase.SaveNewsSources(ListBoxSources.ItemsSource as List<NewsSource>);
+            DataBase.SetReadNewsSources(ListBoxSources.ItemsSource as List<NewsSource>);
             
             this.Close();
         }
-
         private void Button_Click(object sender, RoutedEventArgs e)
         {
             QueryConstructorWindow qcw = new QueryConstructorWindow();
+            qcw.ShowInTaskbar = true;
             qcw.ShowDialog();
         }
-
-        private void ButtonResetNewspapers_OnClick(object sender, RoutedEventArgs e)
-        {
-            SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
-            connection.Execute($"delete from {Consts.NewsTableName}");
-            connection.Execute($"delete from {Consts.FullTextTableName}");
-            MainWindow.LastDBIdent = 0;
-            this.Close();
-        }
-
         private void SaveExcelReport_Click(object sender, RoutedEventArgs e)
         {
+            SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
+            string sql = $"select count(*) from {TableNames.Newspapers}";
+            int count = connection.QueryFirst<int>(sql);
+
+            if (count < 1)
+            {
+                MessageBox.Show("В базе нет новостей.");
+                return;
+            }
             String path = "";
             SaveFileDialog saveFileDialog = new SaveFileDialog();
             saveFileDialog.Title = "Выберите место для сохранения отчёта";
@@ -71,9 +76,168 @@ namespace second_course
             }
 
             CreateReport(path);
-            MessageBox.Show($"Отчёт сохранён в: {saveFileDialog.FileName}");
+            MessageBox.Show($"Отчёт сохранён в: {path}");
         }
-        
+        private void ButtonSaveFullDB_Click(object sender, RoutedEventArgs e)
+        {
+            SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
+            string sql = $"select count(*) from {TableNames.Newspapers}";
+            int count = connection.QueryFirst<int>(sql);
+
+            if (count < 1)
+            {
+                MessageBox.Show("В базе нет новостей.");
+                return;
+            }
+
+            String path = "";
+            SaveFileDialog saveFileDialog = new SaveFileDialog();
+            saveFileDialog.Title = "Выберите место для сохранения резервной копии";
+            saveFileDialog.FileName = $"{DateTime.Now.ToShortDateString()}.ofrebak";
+            saveFileDialog.Filter = "Резервная копия базы данных (*.ofrebak)|*.ofrebak";
+            saveFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (saveFileDialog.ShowDialog() == true)
+            {
+                path = saveFileDialog.FileName;
+            }
+            else
+            {
+                return;
+            }
+
+            CreateAndSaveArchive(path);
+            MessageBox.Show($"Данные сохранены в: {saveFileDialog.FileName}");
+        }
+        private void ButtonAddSource_OnClick(object sender, RoutedEventArgs e)
+        {
+            NewsSource ns = new NewsSource();
+
+            ns.s_rss_link = TextBoxAddSource.Text;
+
+            // проверка на наличия в БД
+            SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
+            string sql = $"select count(*) from {TableNames.NetworkAddress} where s_url='{ns.s_rss_link}';";
+            if (connection.QueryFirst<int>(sql) != 0)
+            {
+                MessageBox.Show("Данный источник уже содержится в таблице");
+                return;
+            }
+
+            try
+            {
+                TryLoadLink(ns);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("Ошибка добавления " + ex.Message);
+                return;
+            }
+
+            DataBase.SaveNewsSource(ns);
+            MessageBox.Show($"Источник {ns.s_name} успешно добавлен.");
+            ListBoxSources.ItemsSource = DataBase.LoadNewsSources();
+        }
+        private void ButtonLoadFullDB_Click(object sender, RoutedEventArgs e)
+        {
+            OpenFileDialog openFileDialog = new OpenFileDialog();
+            openFileDialog.Title = "Выберите файл резервной копии";
+            openFileDialog.Filter = "Резервная копия базы данных (*.ofrebak)|*.ofrebak";
+            openFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
+            if (openFileDialog.ShowDialog() == false)
+            {
+                return;
+            }
+            
+            using (Ionic.Zip.ZipFile zip1 = Ionic.Zip.ZipFile.Read(openFileDialog.FileName))
+            {
+                foreach (Ionic.Zip.ZipEntry entry in zip1)
+                {
+                    entry.Extract(Directory.GetCurrentDirectory(), ExtractExistingFileAction.DoNotOverwrite);
+                }
+            }
+
+            SQLiteConnection externalConnection =
+                DatabaseConnectionHandler.InvokeWithPath($"{Directory.GetCurrentDirectory()}\\{Names.TempBDFile}");
+            SQLiteConnection localConnection = DatabaseConnectionHandler.Invoke();
+
+            List<Newspaper> externalNews = DataBase.LoadNewspapers(externalConnection);
+
+            string sql;
+            foreach (Newspaper np in externalNews) // заполнение новостей данными
+            {
+                sql = $"select i_is_parsed from {TableNames.NewspaperFullText} where id={np.id}";
+                np.i_is_parsed = externalConnection.QueryFirst<bool>(sql);
+
+                sql = $"select s_text from {TableNames.NewspaperFullText} where id={np.id}";
+                np.s_full_text = externalConnection.QueryFirst<string>(sql);
+
+                sql = $"select s_name from {TableNames.Thematic} where id={np.i_thematic_id}";
+                string thematic = externalConnection.QueryFirst<string>(sql);
+
+                np.i_thematic_id = DataBase.GetThematicID(thematic);
+            }
+
+            List<NewsSource> sources = DataBase.LoadNewsSources(externalConnection);
+            
+            sql = $"select image.id id, i_newspaper_id, s_path," +
+                  $" s_url from {TableNames.Images} " +
+                  $"INNER JOIN {TableNames.LocalFileAddress} " +
+                  $"ON image.i_local_address_id = local_address.id " +
+                  $"INNER JOIN {TableNames.NetworkAddress} ON " +
+                  $"network_address.id = image.i_network_address_id;";
+
+            List<ImageDB> images = externalConnection.Query<ImageDB>(sql).ToList();
+
+            foreach (NewsSource source in sources)
+            {
+                sql = $"select count(*) from {TableNames.NetworkAddress} " +
+                      $"where s_url='{source.s_rss_link}';";
+                int cnt = localConnection.QueryFirst<int>(sql);
+                if (cnt == 0)
+                {
+                    DataBase.SaveNewsSource(source);
+                }
+            }
+
+            foreach (Newspaper np in externalNews) // статьи получают актуальные локальные айди и сохраняются в базе
+            {
+                List<ImageDB> newsImages = GetNewspaperImages(np.id, images);
+
+                DataBase.SaveNewspaper(np);
+                
+                foreach (ImageDB image in newsImages)
+                {
+                    sql = $"select count(*) from {TableNames.LocalFileAddress} " +
+                          $"where s_path = '{image.s_path}';";
+                    int count = localConnection.QuerySingle<int>(sql);
+                    if (count != 0)
+                    {
+                        continue;
+                    }
+
+                    DataBase.SaveImage(image);
+                }
+            }
+            
+            File.Delete(Names.TempBDFile);
+            MessageBox.Show("Данные успешно загружены");
+        }
+        private void ButtonRemoveAllData_OnClick(object sender, RoutedEventArgs e)
+        {
+            File.Delete(Names.Database);
+            
+            if (Directory.Exists("temp"))
+                Directory.Delete("temp", true);
+
+            SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
+            connection.Execute(Queries.FullDBCreationQuery);
+
+            DataBase.SaveDefaultNewsSources();
+            MainWindow.LastDBIdent = 0;
+
+            this.Close();
+        }
+
         private void CreateReport(string filePath)
         {
             SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
@@ -94,7 +258,7 @@ namespace second_course
                 ws.Cell($"A{i + 2}").Value = news[i].s_date;
                 ws.Cell($"B{i + 2}").Value = news[i].s_header;
                 ws.Cell($"C{i + 2}").Value = news[i].s_description;
-                ws.Cell($"D{i + 2}").Value = connection.QueryFirst<String>($"select s_text from {Consts.FullTextTableName} where id={news[i].id}");
+                ws.Cell($"D{i + 2}").Value = connection.QueryFirst<String>($"select s_text from {TableNames.NewspaperFullText} where id={news[i].id}");
                 ws.Cell($"E{i + 2}").Value = news[i].SourceName;
             }
             
@@ -107,84 +271,82 @@ namespace second_course
 
             ws.Columns(1, 5).AdjustToContents();
 
+            File.Delete(filePath);
             wb.SaveAs(filePath);
         }
-
-        private void ButtonSaveFullDB_Click(object sender, RoutedEventArgs e)
-        {
-            String path = "";
-            SaveFileDialog saveFileDialog = new SaveFileDialog();
-            saveFileDialog.Title = "Выберите место для сохранения данных";
-            saveFileDialog.FileName = $"db_dump_{DateTime.Now.ToShortDateString()}.zip";
-            saveFileDialog.Filter = "Zip архив (*.zip)|*.zip";
-            saveFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            if (saveFileDialog.ShowDialog() == true)
-            {
-                path = saveFileDialog.FileName;
-            }
-            else
-            {
-                return;
-            }
-
-            CreateAndSaveArchive(path);
-            MessageBox.Show($"Данные сохранены в: {saveFileDialog.FileName}");
-        }
-
         private void CreateAndSaveArchive(String path)
         {
-            using (ZipArchive arc = ZipFile.Open(path, ZipArchiveMode.Create))
+            if (File.Exists(path))
             {
-                ZipFileExtensions.CreateEntryFromFile(arc, Consts.DBname, Consts.TempBDFileName, CompressionLevel.Optimal);
+                File.Delete(path);
+            }
+
+            System.IO.Compression.ZipFile.CreateFromDirectory("temp", path, CompressionLevel.Optimal, true);
+
+            using (ZipArchive arc = System.IO.Compression.ZipFile.Open(path, ZipArchiveMode.Update))
+            {
+                ZipFileExtensions.CreateEntryFromFile(arc, Names.Database, Names.TempBDFile, CompressionLevel.Optimal);
             }
         }
-
-        private void ButtonLoadFullDB_Click(object sender, RoutedEventArgs e)
+        private List<ImageDB> GetNewspaperImages(int id, List<ImageDB> images)
         {
-            OpenFileDialog openFileDialog = new OpenFileDialog();
-            openFileDialog.Title = "Выберите архив с новостями";
-            openFileDialog.Filter = "Zip архив (*.zip)|*.zip";
-            openFileDialog.InitialDirectory = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
-            if (!openFileDialog.ShowDialog() == true)
+            List<ImageDB> res = new List<ImageDB>();
+            foreach (ImageDB image in images)
             {
-                return;
+                if (image.i_newspaper_id == id)
+                    res.Add(image);
             }
 
-            ZipFile.ExtractToDirectory(openFileDialog.FileName, Directory.GetCurrentDirectory()); 
-
-            SQLiteConnection tempConn =
-                DatabaseConnectionHandler.InvokeWithPath($"{Directory.GetCurrentDirectory()}\\{Consts.TempBDFileName}");
-
-            List<Newspaper> tempNews = DataBase.LoadNewspapers(tempConn);
-            List<Newspaper> localNews = DataBase.LoadNewspapers();
-
-            foreach (Newspaper tempNewspaper in tempNews)
+            return res;
+        }
+        private void TryLoadLink(NewsSource source)
+        {
+            HttpWebRequest req = (HttpWebRequest)WebRequest.Create(source.s_rss_link);
+            HttpWebResponse resp = (HttpWebResponse)req.GetResponse();
+            
+            Encoding enc; // некоторые сайты не возвращают кодировку
+            try
             {
-                Boolean isExists = false;
-                foreach (Newspaper localNewspaper in localNews)
+                enc = Encoding.GetEncoding(resp.CharacterSet);
+            }
+            catch (System.ArgumentException)
+            {
+                Console.WriteLine("enc");
+                enc = Encoding.UTF8;
+            }
+
+            StreamReader sr = new StreamReader(resp.GetResponseStream(), enc);
+            using (XmlReader reader = XmlReader.Create(new StringReader(sr.ReadToEnd())))
+            {
+                var formatter = new Rss20FeedFormatter();
+                formatter.ReadFrom(reader);
+
+                string tempName = formatter.Feed.Title.Text;
+                source.s_name = tempName.Substring(0, tempName.Length < 18 ? tempName.Length : 18);
+                
+                foreach (SyndicationItem syndItem in formatter.Feed.Items)
                 {
-                    if (localNewspaper.s_link == tempNewspaper.s_link)
+                    Newspaper np = new Newspaper();
+                    try
                     {
-                        isExists = true;
+                        np.i_thematic_id =
+                            DataBase.GetThematicID(syndItem.Categories.Count != 0
+                                ? syndItem.Categories.First().Name
+                                : "-");
+                        np.s_header = syndItem.Title.Text.Replace("'", "");
+                        np.s_description = syndItem.Summary?.Text.Replace("'", "");
+                        np.s_date = syndItem.PublishDate.DateTime.ToString();
+                        np.i_source_id = source.id;
+                        np.s_link = syndItem.Links[0].Uri.ToString();
+                        np.i_is_read = false;
+                        DataBase.SaveNewspaper(np);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("np (rss adding) parsing error ");
                     }
                 }
-
-                if (!isExists)
-                {
-                    tempNewspaper.s_full_text =
-                        tempConn.QueryFirst<String>(
-                            $"select s_text from {Consts.FullTextTableName} where id={tempNewspaper.id}");
-
-                    // TODO если добавлю картинки, перегрузить их тоже.
-                    // на тематику забиваю.
-                    // TODO Добавить вывод тематики в полной новости
-
-                    DataBase.SaveNewspaper(tempNewspaper);
-                }
             }
-
-            MessageBox.Show("Данные успешно загружены");
-            File.Delete(Consts.TempBDFileName);
         }
     }
 }

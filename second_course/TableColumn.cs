@@ -11,24 +11,22 @@ namespace second_course
 {
     class TableColumn : INotifyPropertyChanged
     {
-        private Boolean _selected;
+        private Boolean _isSelected;
 
         public String name { get; set; }
 
-        public Boolean selected
+        public Boolean IsSelected
         {
-            get { return _selected; }
+            get { return _isSelected; }
             set
             {
+                _isSelected = value;
                 OnPropertyChanged();
-                _selected = value;
             }
         }
 
         public TableColumn()
-        {
-
-        }
+        {}
 
         public event PropertyChangedEventHandler PropertyChanged;
 

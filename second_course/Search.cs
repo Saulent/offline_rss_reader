@@ -18,13 +18,11 @@ namespace second_course
 
             List<Newspaper> result = new List<Newspaper>();
 
-            foreach (Newspaper newpaper in newspapers)
+            foreach (Newspaper newspaper in newspapers)
             {
-                //MessageBox.Show("outer");
-                if (newpaper.s_header.ToLower().Contains(query)) 
+                if (newspaper.s_header.ToLower().Contains(query) || newspaper.s_description.ToLower().Contains(query)) 
                 {
-                    result.Add(newpaper);
-                    //MessageBox.Show("inner");
+                    result.Add(newspaper);
                 }
             }
             

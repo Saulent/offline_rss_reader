@@ -12,7 +12,7 @@ namespace second_course
     public class Newspaper : INotifyPropertyChanged
     {
         private Boolean _i_is_read;
-
+        public Boolean i_is_parsed;
         public Int32 id { get; set; }
         public Int32 i_thematic_id { get; set; }
         public String s_header { get; set; }

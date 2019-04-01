@@ -192,7 +192,7 @@
         </Style>
     </Window.Resources>
 
-    <Grid>
+    <Grid Background="#33393f">
         <Grid.RowDefinitions>
             <RowDefinition Height="25"/>
             <RowDefinition Height="330"/>
@@ -200,12 +200,34 @@
             <RowDefinition Height="29*"/>
         </Grid.RowDefinitions>
         <Rectangle x:Name="HeaderSettingsRectangle" Fill="#373e45" MouseDown="HeaderSettingsRectangle_OnMouseDown"/>
-        <TextBlock Name="TextBlockSettingsHeader" FontSize="16" Background="Transparent" Foreground="#f5f5f5" MouseDown="HeaderSettingsRectangle_OnMouseDown" Text="test" Grid.ColumnSpan="2" Margin="0,0,83,0" VerticalAlignment="Center" Padding="7"/>
-        <Image x:Name="ButtonSettingsClose" Source="resources/close.png" Margin="475,0,0,0" MouseUp="ButtonSettingsClose_OnMouseUp" RenderTransformOrigin="0.5,0.5"/>
-        <TextBlock HorizontalAlignment="Left" Margin="10,5,0,0" Grid.Row="2" TextWrapping="Wrap" Text="Загрузка/выгрузка" VerticalAlignment="Top" Height="18" Width="191"/>
-        <TextBlock HorizontalAlignment="Left" Margin="10,0,0,0" Grid.Row="3" TextWrapping="Wrap" Text="Отладка" VerticalAlignment="Top" Height="23" Width="191"/>
-        <TextBlock HorizontalAlignment="Left" Margin="10,5,0,0" Grid.Row="1" TextWrapping="Wrap" Text="Каналы" VerticalAlignment="Top" Height="18" Width="94"/>
-        <ListBox Name="ListBoxSources" ScrollViewer.CanContentScroll="False" BorderThickness="0" Background="#33393f" HorizontalAlignment="Left" Margin="0,28,0,0" Grid.Row="1" Width="500">
+        <TextBlock Name="TextBlockSettingsHeader" FontSize="16" Background="Transparent" Foreground="#f5f5f5" MouseDown="HeaderSettingsRectangle_OnMouseDown" Text="Header text" Grid.ColumnSpan="2" Margin="0,0,83,0" VerticalAlignment="Center" Padding="7"/>
+        <Border Margin="475,0,0,0.333" RenderTransformOrigin="0.5,0.5" Width="25" Height="25">
+            <Image x:Name="ButtonSettingsClose" Source="resources/close.png" Width="25" Height="25" Margin="0,0,0.333,0.333" MouseUp="ButtonSettingsClose_OnMouseUp" RenderTransformOrigin="0.5,0.5"/>
+            <Border.Resources>
+                <Style TargetType="Border">
+                    <Style.Setters>
+                        <Setter Property="Background" Value="Transparent" />
+                    </Style.Setters>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="red" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Resources>
+            <Border.RenderTransform>
+                <TransformGroup>
+                    <ScaleTransform ScaleX="-1"/>
+                    <SkewTransform/>
+                    <RotateTransform/>
+                    <TranslateTransform/>
+                </TransformGroup>
+            </Border.RenderTransform>
+        </Border>
+        <TextBlock HorizontalAlignment="Left" Foreground="#f5f5f5" FontSize="14" Margin="10,5,0,0" Grid.Row="2" TextWrapping="Wrap" Text="Работа с файлами" VerticalAlignment="Top" Height="18" Width="191"/>
+        <TextBlock HorizontalAlignment="Left" Foreground="#f5f5f5" FontSize="14" Margin="10,5,0,0" Grid.Row="3" TextWrapping="Wrap" Text="Отладка" VerticalAlignment="Top" Height="23" Width="191"/>
+        <TextBlock HorizontalAlignment="Left" Foreground="#f5f5f5" FontSize="14" Margin="10,5,0,0" Grid.Row="1" TextWrapping="Wrap" Text="Каналы" VerticalAlignment="Top" Height="18" Width="94"/>
+        <ListBox Name="ListBoxSources" ScrollViewer.CanContentScroll="False" BorderThickness="0" Background="#3d444b"  HorizontalAlignment="Left" Margin="0,23,0,55" Grid.Row="1" Width="500">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <Grid Margin="0">
@@ -220,10 +242,179 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
         </ListBox>
-        <Button Name="ButtonSaveFullDB" Content="Сохранить новости из базы..." HorizontalAlignment="Left" HorizontalContentAlignment="Left" Margin="10,28,0,0" Grid.Row="2" VerticalAlignment="Top" Width="215" Height="20" Click="ButtonSaveFullDB_Click"/>
-        <Button Name="ButtonLoadFullDB" Content="Загрузить новости в базу из файла..." HorizontalAlignment="Left" HorizontalContentAlignment="Left" Margin="10,58,0,0" Grid.Row="2" VerticalAlignment="Top" Width="215" Height="20" Click="ButtonLoadFullDB_Click"/>
-        <Button Content="Открыть конструктор запросов" HorizontalAlignment="Left" Margin="10,28,0,0" Grid.Row="3" VerticalAlignment="Top" Width="191" Height="20" Click="Button_Click"/>
-        <Button Content="Очистить базу новостей" Name="ButtonResetNewspapers" HorizontalAlignment="Left" Margin="327,28,0,0" Grid.Row="3" VerticalAlignment="Top" Width="163" Click="ButtonResetNewspapers_OnClick"/>
-        <Button Name="SaveExcelReport" Content="Сохранить отчёт о загруженных новостях..." HorizontalAlignment="Left" HorizontalContentAlignment="Left" Margin="244,28,0,0" Grid.Row="2" VerticalAlignment="Top" Width="246" Height="20" Click="SaveExcelReport_Click"/>
+        <Button Name="ButtonSaveFullDB" Content="Создать резервную копию..." HorizontalAlignment="Left" HorizontalContentAlignment="Left" Margin="10,28,0,0" Grid.Row="2" VerticalAlignment="Top" Width="215" Height="20" Click="ButtonSaveFullDB_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border BorderThickness="1"
+                            Background="#373e45"
+                            BorderBrush="#45d2bd"
+                            SnapsToDevicePixels="true">
+                        <ContentPresenter Margin="0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextBlock.Foreground" Value="#A8A8A8"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+            <Button.Resources>
+                <Style TargetType="Button">
+                    <Style.Setters>
+                        <Setter Property="Foreground" Value="#f5f5f5"></Setter>
+                    </Style.Setters>
+                </Style>
+            </Button.Resources>
+        </Button>
+        <Button Name="ButtonLoadFullDB" Content="Загрузить резервную копию..." HorizontalAlignment="Left" HorizontalContentAlignment="Left" Margin="10,58,0,0" Grid.Row="2" VerticalAlignment="Top" Width="215" Height="20" Click="ButtonLoadFullDB_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border BorderThickness="1"
+                            Background="#373e45"
+                            BorderBrush="#45d2bd"
+                            SnapsToDevicePixels="true">
+                        <ContentPresenter Margin="0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextBlock.Foreground" Value="#A8A8A8"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+            <Button.Resources>
+                <Style TargetType="Button">
+                    <Style.Setters>
+                        <Setter Property="Foreground" Value="#f5f5f5"></Setter>
+                    </Style.Setters>
+                </Style>
+            </Button.Resources>
+        </Button>
+        <Button Content="Открыть конструктор запросов" HorizontalAlignment="Left" Margin="10,28,0,0" Grid.Row="3" VerticalAlignment="Top" Width="215" Height="20" Click="Button_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border BorderThickness="1"
+                            Background="#373e45"
+                            BorderBrush="#45d2bd"
+                            SnapsToDevicePixels="true">
+                        <ContentPresenter Margin="0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextBlock.Foreground" Value="#A8A8A8"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+            <Button.Resources>
+                <Style TargetType="Button">
+                    <Style.Setters>
+                        <Setter Property="Foreground" Value="#f5f5f5"></Setter>
+                    </Style.Setters>
+                </Style>
+            </Button.Resources>
+        </Button>
+        <Button Name="SaveExcelReport" Content="Сохранить отчёт о загруженных новостях..." HorizontalAlignment="Left" HorizontalContentAlignment="Left" Margin="244,28,0,0" Grid.Row="2" VerticalAlignment="Top" Width="246" Height="20" Click="SaveExcelReport_Click">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border BorderThickness="1"
+                            Background="#373e45"
+                            BorderBrush="#45d2bd"
+                            SnapsToDevicePixels="true">
+                        <ContentPresenter Margin="0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextBlock.Foreground" Value="#A8A8A8"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+            <Button.Resources>
+                <Style TargetType="Button">
+                    <Style.Setters>
+                        <Setter Property="Foreground" Value="#f5f5f5"></Setter>
+                    </Style.Setters>
+                </Style>
+            </Button.Resources>
+        </Button>
+        <Button Name="ButtonAddSource" Content="Добавить" HorizontalAlignment="Left" Margin="415,305,0,0" Grid.Row="1" VerticalAlignment="Top" Width="75" Click="ButtonAddSource_OnClick" Height="20">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border BorderThickness="1"
+                            Background="#373e45"
+                            BorderBrush="#45d2bd"
+                            SnapsToDevicePixels="true">
+                        <ContentPresenter Margin="0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextBlock.Foreground" Value="#A8A8A8"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+            <Button.Resources>
+                <Style TargetType="Button">
+                    <Style.Setters>
+                        <Setter Property="Foreground" Value="#f5f5f5"></Setter>
+                    </Style.Setters>
+                </Style>
+            </Button.Resources>
+        </Button>
+
+        <TextBox Name="TextBoxAddSource" Background="#3d444b" Foreground="#f5f5f5" HorizontalAlignment="Left" Height="20" Margin="10,305,0,0" Grid.Row="1" TextWrapping="Wrap" VerticalAlignment="Top" Width="400"/>
+        <TextBlock HorizontalAlignment="Left" Foreground="#f5f5f5" FontSize="14" Margin="10,280,0,0" Grid.Row="1" TextWrapping="Wrap" Text="Добавление ссылки на новый источник" VerticalAlignment="Top" Width="309"/>
+        <Rectangle Fill="Gray" HorizontalAlignment="Left" Height="1" VerticalAlignment="Top" Width="500" Grid.Row="1"/>
+        <Rectangle Fill="Gray" HorizontalAlignment="Left" Height="1" VerticalAlignment="Top" Width="500" Grid.Row="2"/>
+        <Rectangle Fill="Gray" HorizontalAlignment="Left" Height="1" VerticalAlignment="Top" Width="500" Grid.Row="3"/>
+
+        <Border BorderBrush="#45d2bd" BorderThickness="1" HorizontalAlignment="Left" Height="501" VerticalAlignment="Top" Width="500" Grid.RowSpan="4"/>
+        <Button x:Name="ButtonRemoveAllData" Content="Удалить все загруженные данные" HorizontalAlignment="Left" HorizontalContentAlignment="Left" Margin="244,28,0,0" Grid.Row="3" VerticalAlignment="Top" Width="246" Height="20" Click="ButtonRemoveAllData_OnClick">
+            <Button.Resources>
+                <Style TargetType="{x:Type Button}">
+                    <Setter Property="Foreground" Value="#f5f5f5"/>
+                </Style>
+            </Button.Resources>
+            <Button.Template>
+                <ControlTemplate TargetType="{x:Type Button}">
+                    <Border BorderThickness="1"
+                        Background="#373e45"
+                        BorderBrush="#45d2bd"
+                        SnapsToDevicePixels="true">
+                        <ContentPresenter Margin="0"
+                            VerticalAlignment="Center"
+                            HorizontalAlignment="Center"
+                            RecognizesAccessKey="True"
+                            SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextBlock.Foreground" Value="#A8A8A8"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+        </Button>
     </Grid>
 </Window>

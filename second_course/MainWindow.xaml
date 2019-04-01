@@ -8,10 +8,17 @@
         WindowStyle="None"
         ResizeMode="NoResize"
         Title="Новости офлайн" 
+        Icon="resources\rss2.png"
         Height="450" 
         Width="800">
 
+
+
     <Window.Resources>
+
+
+
+
         <SolidColorBrush x:Key="StandardBorderBrush" Color="#888" />
         <SolidColorBrush x:Key="StandardBackgroundBrush" Color="Black" />
         <SolidColorBrush x:Key="HoverBorderBrush" Color="#DDD" />
@@ -189,6 +196,11 @@
                 </Setter.Value>
             </Setter>
         </Style>
+        <ControlTemplate x:Key="ButtonTemplate" TargetType="Button">
+            <Border BorderBrush="#45d2bd" BorderThickness="1" TextBlock.Foreground="#f5f5f5" TextBlock.FontSize="13" TextBlock.TextAlignment="Center" Background="#373e45">
+                <ContentPresenter RecognizesAccessKey="True" ></ContentPresenter>
+            </Border>
+        </ControlTemplate>
     </Window.Resources>
 
     <Grid>
@@ -202,18 +214,9 @@
         </Grid.RowDefinitions>
         <Rectangle x:Name="HeaderRectangle" Fill="#373e45" HorizontalAlignment="Left" Height="25" VerticalAlignment="Top" Width="800" Grid.ColumnSpan="2" MouseDown="HeaderRectangle_OnMouseDown">
         </Rectangle>
-        <TextBlock Name="TextBlockHeader" FontSize="16" Background="Transparent" Foreground="#f5f5f5" MouseDown="HeaderRectangle_OnMouseDown" Text="test" Grid.ColumnSpan="2" Margin="0,0,83,0" VerticalAlignment="Center" Padding="7"/>
+        <TextBlock Name="TextBlockHeader" FontSize="16" Background="Transparent" Foreground="#f5f5f5" MouseDown="HeaderRectangle_OnMouseDown" Text="Header text" Grid.ColumnSpan="2" Margin="0,0,83,0" VerticalAlignment="Center" Padding="7"/>
         <Border Grid.Column="1" Margin="575,0,0,0">
-            <Image x:Name="ButtonClose" Height="25" Width="25" Source="resources/close.png" VerticalAlignment="Bottom" Grid.Column="1" MouseUp="ButtonClose_OnMouseUp" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Right">
-                <Image.RenderTransform>
-                    <TransformGroup>
-                        <ScaleTransform ScaleX="-1"/>
-                        <SkewTransform/>
-                        <RotateTransform/>
-                        <TranslateTransform/>
-                    </TransformGroup>
-                </Image.RenderTransform>
-            </Image>
+            <Image x:Name="ButtonClose" Height="25" Width="25" Source="resources/close.png" VerticalAlignment="Bottom" Grid.Column="1" MouseUp="ButtonClose_OnMouseUp" RenderTransformOrigin="0.5,0.5" HorizontalAlignment="Right"/>
             <Border.Resources>
                 <Style TargetType="Border">
                     <Style.Setters>
@@ -228,7 +231,7 @@
             </Border.Resources>
         </Border>
         <Border Grid.Column="1" Margin="550,0,25,0">
-            <Image x:Name="ButtonRestore" Height="25" Width="25" Source="resources/restore.png" VerticalAlignment="Bottom" Grid.Column="1" RenderTransformOrigin="0.5,0.5"/>
+            <Image x:Name="ButtonMinimize" Height="25" Width="25" Source="resources/minimize.png" VerticalAlignment="Bottom" Grid.Column="1" MouseDown="ButtonMinimize_OnMouseDown"/>
             <Border.Resources>
                 <Style TargetType="Border">
                     <Style.Setters>
@@ -242,36 +245,55 @@
                 </Style>
             </Border.Resources>
         </Border>
-        <Border Grid.Column="1" Margin="525,0,50,0">
-            <Image x:Name="ButtonMinimize" Height="25" Width="25" Source="resources/minimize.png" VerticalAlignment="Bottom" Grid.Column="1"/>
-            <Border.Resources>
-                <Style TargetType="Border">
-                    <Style.Setters>
-                        <Setter Property="Background" Value="Transparent" />
-                    </Style.Setters>
-                    <Style.Triggers>
-                        <Trigger Property="IsMouseOver" Value="True">
-                            <Setter Property="Background" Value="DimGray" />
+        <Button Name="ButtonSettings" Content="Настройки" Click="ButtonSettings_OnClick" Margin="0,401.667,0,0.667" Grid.Row="1">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border BorderThickness="1"
+                            Background="#373e45"
+                            BorderBrush="#45d2bd"
+                            SnapsToDevicePixels="true">
+                        <ContentPresenter Margin="0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextBlock.Foreground" Value="#A8A8A8"/>
                         </Trigger>
-                    </Style.Triggers>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+            <Button.Resources>
+                <Style TargetType="Button">
+                    <Style.Setters>
+                        <Setter Property="Foreground" Value="#f5f5f5"></Setter>
+                    </Style.Setters>
                 </Style>
-            </Border.Resources>
-        </Border>
-        <Rectangle Fill="#373e45" HorizontalAlignment="Left" Height="38" Margin="0,387,0,0" Grid.Row="1" VerticalAlignment="Top" Width="200" MouseDown="SettingsButton_OnMouseDown"/>
-        <TextBlock HorizontalAlignment="Left" FontFamily="Helvetica" Margin="0,387,0,0" Grid.Row="1" VerticalAlignment="Center" Foreground="#45d2bd" FontSize="16" MouseDown="SettingsButton_OnMouseDown" TextWrapping="Wrap" TextAlignment="Center" Text="НАСТРОЙКИ" Width="200"/>
-        <ScrollViewer Background="#33393f"  Grid.Column="1" HorizontalAlignment="Left" Height="387" Grid.Row="1" VerticalAlignment="Top" Width="600">
-            <Grid Name="GridTest" Width="600">
-                <TextBlock Name="TextBlockNewText" Grid.Row="0" TextWrapping="Wrap" Foreground="#f5f5f5" FontSize="20" FontFamily="Helvetica" Text="Выберите новость из списка слева для просмотра"/>
+            </Button.Resources>
+        </Button>
+        <ScrollViewer Background="#33393f"  Grid.Column="1" HorizontalAlignment="Left" Height="401" VerticalAlignment="Top" Width="600" Grid.Row="1" Margin="0,1,0,0">
+            <Grid Name="GridScrollView" Width="570" Height="auto">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="106*"/>
+                    <RowDefinition Height="295*"/>
+                </Grid.RowDefinitions>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition></ColumnDefinition>
+                    <ColumnDefinition></ColumnDefinition>
+                </Grid.ColumnDefinitions>
+                <TextBlock Name="TextBlockNewText" Grid.Row="0" Grid.ColumnSpan="2" TextWrapping="Wrap" Foreground="#f5f5f5" FontSize="20" FontFamily="Helvetica" Text="Выберите новость из списка слева для просмотра" Grid.RowSpan="2"/>
             </Grid>
         </ScrollViewer>
-        <ListBox Background="#33393f" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0" BorderThickness="0" Name="ListBoxNewHeaders" SelectionChanged="ListBoxNewHeaders_OnSelectionChanged" HorizontalAlignment="Left" Height="342" Grid.Row="1" VerticalAlignment="Top" Width="200" ScrollViewer.CanContentScroll="False" Margin="0,45,0,0">
+        <ListBox Background="#33393f" HorizontalContentAlignment="Stretch" ScrollViewer.HorizontalScrollBarVisibility="Disabled" Padding="0" BorderThickness="0" Name="ListBoxNewHeaders" SelectionChanged="ListBoxNewHeaders_OnSelectionChanged" HorizontalAlignment="Left" Height="354" Grid.Row="1" VerticalAlignment="Top" Width="200" ScrollViewer.CanContentScroll="False" Margin="0,47.667,0,0">
             <ListBox.ItemTemplate>
                 <DataTemplate>
                     <!--<Grid Name="GridHeadersListBox" Margin="-4,-1,-4,-1">-->
                     <Grid Name="GridHeadersListBox" Margin="0,0,0,0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="12"></RowDefinition>
-                            <RowDefinition Height="44"></RowDefinition>
+                            <RowDefinition Height="48"></RowDefinition>
                             <RowDefinition Height="12"></RowDefinition>
                             <RowDefinition Height="14"></RowDefinition>
                         </Grid.RowDefinitions>
@@ -299,11 +321,45 @@
                     </Grid>
                 </DataTemplate>
             </ListBox.ItemTemplate>
-
         </ListBox>
-        <Button Content="Обновить" Name="Button666" HorizontalAlignment="Left" Grid.Row="1" Width="200" Margin="0,25,0,380" Click="Button_OnClick"/>
-        <TextBox FontSize="14" VerticalContentAlignment="Center" Padding="0" Text="Введите искомые слова" Foreground="Gray" BorderThickness="0" Name="TextBoxSearch" HorizontalAlignment="Left" Height="25" Grid.Row="1" TextWrapping="Wrap" VerticalAlignment="Top" Width="200" TextChanged="TextBoxSearch_OnTextChanged"/>
-        <ProgressBar Name="ProgressBarParsingNews" Grid.Column="1" HorizontalAlignment="Left" Height="38" Margin="0,387,0,0" Grid.Row="1" VerticalAlignment="Top" Width="600"/>
-        <TextBlock Name="TextBlockTestProgress" Grid.Column="1" HorizontalAlignment="Left" Margin="278,400,0,0" Grid.Row="1" TextWrapping="Wrap" Text="TextBlock" VerticalAlignment="Top"/>
+        <Button Content="Обновить" Name="ButtonUpdate" HorizontalAlignment="Left" Grid.Row="1" Width="200" Margin="0,24.667,0,375.667" Click="Button_OnClick">
+            <Button.Template>
+                <ControlTemplate TargetType="Button">
+                    <Border BorderThickness="1"
+                            Background="#373e45"
+                            BorderBrush="#45d2bd"
+                            SnapsToDevicePixels="true">
+                        <ContentPresenter Margin="0"
+                                          VerticalAlignment="Center"
+                                          HorizontalAlignment="Center"
+                                          RecognizesAccessKey="True"
+                                          SnapsToDevicePixels="True"/>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="IsEnabled" Value="false">
+                            <Setter Property="TextBlock.Foreground" Value="#A8A8A8"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Button.Template>
+            <Button.Resources>
+                <Style TargetType="Button">
+                    <Style.Setters>
+                        <Setter Property="Foreground" Value="#f5f5f5"></Setter>
+                    </Style.Setters>
+                </Style>
+            </Button.Resources>
+        </Button>
+
+        <TextBox FontSize="14" VerticalContentAlignment="Center" Padding="0" Text="Введите искомые слова" 
+                 Foreground="#A1A1A1" Background="#3d444b"
+                 BorderThickness="0" Name="TextBoxSearch" HorizontalAlignment="Left" Height="25" Grid.Row="1" TextWrapping="Wrap" 
+                 VerticalAlignment="Top" Width="199" TextChanged="TextBoxSearch_OnTextChanged" Margin="1,0,0,0"/>
+        <ProgressBar Name="ProgressBarParsingNews" Background="DimGray" Grid.Column="1" HorizontalAlignment="Left" Height="23" Margin="0,402,0,0" Grid.Row="1" VerticalAlignment="Top" Width="600"/>
+        <Rectangle Fill="Gray" HorizontalAlignment="Left" Height="402" Margin="0,25,0,0" VerticalAlignment="Top" Width="1" Grid.Column="1" Grid.RowSpan="2"/>
+        <Rectangle Fill="Gray" HorizontalAlignment="Left" Height="1" VerticalAlignment="Top" Width="200" Grid.Row="1"/>
+        <Rectangle Fill="Gray" HorizontalAlignment="Left" Height="24" VerticalAlignment="Top" Width="1" Grid.Row="1" Margin="0,1,0,0"/>
+        <Rectangle Fill="Gray" HorizontalAlignment="Left" Height="1" VerticalAlignment="Top" Width="600" Grid.Column="1" Grid.Row="1"/>
+        <Border BorderBrush="DodgerBlue" BorderThickness="1" HorizontalAlignment="Left" Height="450" VerticalAlignment="Top" Width="800" Grid.ColumnSpan="2" Grid.RowSpan="2"/>
     </Grid>
 </Window>

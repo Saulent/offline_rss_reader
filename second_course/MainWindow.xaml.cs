@@ -3,25 +3,21 @@ using System.Collections.Generic;
 using System.ComponentModel;
 using System.Data.SQLite;
 using System.Diagnostics;
-using System.Drawing;
 using System.IO;
 using System.Linq;
 using System.Net;
 using System.ServiceModel.Syndication;
 using System.Text;
-using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
 using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Navigation;
 using System.Xml;
-using ClosedXML.Report.Utils;
 using Dapper;
-using HtmlAgilityPack;
 using Brushes = System.Windows.Media.Brushes;
 
 namespace second_course
@@ -33,20 +29,20 @@ namespace second_course
         public static Int32 LastDBIdent;
         private Boolean _searchFieldWaterMarkActive = true;
         private List<Newspaper> _newspapers;
-        
+        private Boolean _isFullNewsUpdatingNow = false;
+
         public MainWindow()
         {
-            if (!File.Exists(Consts.DBname)) // Запись таблиц в бд при первом запуске
+            if (!File.Exists(second_course.Names.Database)) // Запись таблиц в бд при первом запуске
             {
                 SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
-                connection.Execute(Consts.FullDBCreationQuery);
-                connection.Execute(Consts.DefaultNewsSourcesQuery);
+                connection.Execute(Queries.FullDBCreationQuery);
+                DataBase.SaveDefaultNewsSources();
             }
-
+            
             InitializeComponent();
             TextBlockHeader.Text = this.Title;
             LastDBIdent = GetLastDBIdent();
-
             
             TextBoxSearch.GotFocus += (source, e) =>
             {
@@ -54,21 +50,19 @@ namespace second_course
                 {
                     this._searchFieldWaterMarkActive = false;
                     this.TextBoxSearch.Text = "";
-                    this.TextBoxSearch.Foreground = Brushes.Black;
+                    this.TextBoxSearch.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#f5f5f5")); 
                 }
             };
-
             TextBoxSearch.LostFocus += (source, e) =>
             {
                 if (!this._searchFieldWaterMarkActive && string.IsNullOrEmpty(TextBoxSearch.Text))
                 {
                     this._searchFieldWaterMarkActive = true;
                     this.TextBoxSearch.Text = "Введите искомые слова";
-                    this.TextBoxSearch.Foreground = Brushes.Gray;
+                    this.TextBoxSearch.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#A1A1A1")); 
                 }
             };
             
-
             // ==========================================================================
 
             _updateRSSWorker.DoWork += Worker_RSSUpdateDoWork;
@@ -81,31 +75,14 @@ namespace second_course
             _loadFullNewsWorker.WorkerReportsProgress = true;
             _loadFullNewsWorker.ProgressChanged += Worker_ParseFullNewsProgressChanged;
 
-            _newspapers = DataBase.LoadNewspapers();
+            _newspapers = DataBase.LoadSelectedNewspapers();
             SetHeadersSourceList(_newspapers);
-
-            // доделать парсинг новости на вывод в прогу. ++ придумать как сохранять изображения в БД <img>666</img>
-            // определение начала новости по тегу div в классом. Изображения выводятся там, где должны быть
-            // загрузка картинок в БД
-
-            // TODO залить на гит, прописать .gitignore
-
-            // TODO попробовать сделать поиск через БД
-
-            // TODO нормализовать БД
-
-            // todo вывод тематики
-
-            // TODO сделать что-то с цветами, чтобы они не сливались (глянуть как это сделали в телеге). Мб использовать другую цветовую гамму.
             
-            // попытка повтора после завершения парсинга?
+            //QueryConstructorWindow qw = new QueryConstructorWindow();
+            //qw.ShowInTaskbar = true;
+            //qw.ShowDialog();
 
-            // после текста курсача: выделить наиболее актуальные источники новостей для их обработки
-            
-
-            // запихать вызов коннекшн в юзинги
-            
-            // проверить метод слияния текущих новостей и новых 
+            //Application.Current.Shutdown();
         }
 
         /// <summary>
@@ -115,13 +92,16 @@ namespace second_course
         private static Int32 GetLastDBIdent()
         {
             SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
-            int maxIdent = 0;
+            int maxIdent;
             try
             {
-                maxIdent = connection.QueryFirst<Int32>($"select max(id) from {Consts.NewsTableName}");
+                maxIdent = connection.QueryFirst<Int32>($"select max(id) from {TableNames.Newspapers}");
             }
-            catch
-            {}
+            catch (Exception)
+            {
+                Console.WriteLine("set max id = 0");
+                maxIdent = 0;
+            }
 
             maxIdent++; // Чтобы следующий элемент имел отличный от найденного id
 
@@ -129,7 +109,7 @@ namespace second_course
         }
         public void Worker_ParseFullNewsProgressChanged(object sender, ProgressChangedEventArgs e)
         {
-            Button666.Dispatcher.BeginInvoke(new Action(delegate ()
+            ButtonUpdate.Dispatcher.BeginInvoke(new Action(delegate ()
             {
                 ProgressBarParsingNews.Value = e.ProgressPercentage;
                 
@@ -143,16 +123,22 @@ namespace second_course
         /// <param name="e"></param>
         public void Worker_ParseFullNewsDoWork(object sender, DoWorkEventArgs e)
         {
-            var news = e.Argument as List<Newspaper>;
-            
             SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
-            String sql = $"select id from {Consts.FullTextTableName} where i_is_parsed=0";
-            var notParsed = connection.Query<Int32>(sql).ToList();
             
-            int threads = 14;
+            string sql = $"select np.id id, np.s_link s_link from " +
+                         $"{TableNames.NewspaperFullText} as ft " +
+                         $"INNER JOIN {TableNames.Newspapers} as np on ft.id = np.id " +
+                         $"where ft.i_is_parsed = 0";
+
+            List<Newspaper> news = connection.Query<Newspaper>(sql).ToList();
+            
+            int threads = 16;
             List<List<Newspaper>> parallelWorks = new List<List<Newspaper>>();
 
             int step = news.Count / (threads - 1);
+            if (step < 1)
+                step = 1;
+
             for (int i = 0; i < news.Count; i += step) // деление на части для параллельного парсинга
             {
                 List<Newspaper> works = new List<Newspaper>();
@@ -162,52 +148,73 @@ namespace second_course
                 }
                 parallelWorks.Add(works);
             }
-            
+
+            bool isServerDown = false;
             int parsed = 0;
             Parallel.For(0, threads, (i, state) =>
             {
-                //Console.WriteLine($"parallel {i} started");
-                foreach (Newspaper np in parallelWorks[i])
+                if (i < parallelWorks.Count)
                 {
-                    if (notParsed.Contains(np.id))
+                    foreach (Newspaper np in parallelWorks[i])
                     {
+                        if (_loadFullNewsWorker.CancellationPending)
+                        {
+                            break;
+                        }
+                        
+                        string fullText;
                         try
                         {
-                            String fullText = ParseFullNewspaper.GetFullNewspaperText(np.s_link);
-                            DataBase.UpdateNewspaperFullText(np.id, fullText);
+                            fullText = ParseFullNewspaper.GetFullNewspaperText(np.s_link, np.id);
                         }
-                        catch
+                        catch (Exception ex)
                         {
-                            Console.WriteLine($"error in parsing newpaper id={np.id}");
+                            Console.WriteLine($"error in parsing newspaper id={np.id}, {ex.Message}, s_link={np.s_link}");
+                            if (ex.Message == "Невозможно соединиться с удаленным сервером")
+                            {
+                                isServerDown = true;
+                                break;
+                            }
                             continue;
                         }
+                        DataBase.UpdateNewspaperFullText(np.id, fullText);
 
                         parsed++;
                         if (_loadFullNewsWorker.WorkerReportsProgress)
                         {
-                            _loadFullNewsWorker.ReportProgress((int) (((double) parsed / (double) notParsed.Count) * 100));
+                            _loadFullNewsWorker.ReportProgress((int) (((double) parsed / (double) news.Count) * 100));
                         }
-                        Console.WriteLine(parsed + " / " + notParsed.Count);
+                        //Console.WriteLine(parsed + " / " + news.Count + " np id: " + np.id);
                     }
                 }
-                //Console.WriteLine($"parallel {i} finished");
             });
+
+            if (isServerDown)
+            {
+                MessageBox.Show("Невозможно соединиться с удаленным сервером, возможно сервер выключен или отсутствует подключение к сети интернет.");
+                return;
+            }
 
             e.Result = news;
         }
         public void Worker_ParseFullNewsFinished(object sender, RunWorkerCompletedEventArgs e)
         {
             List<Newspaper> items = e.Result as List<Newspaper>;
-            SetHeadersSourceList(items);
+            //SetHeadersSourceList(items);
             SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
-            String sql = $"select count(*) from {Consts.FullTextTableName} where i_is_parsed=1;";
+            String sql = $"select count(*) from {TableNames.NewspaperFullText}" +
+                         $" where i_is_parsed=1;";
             Int32 parsed = connection.QueryFirst<Int32>(sql);
 
-            sql = $"select count(*) from {Consts.FullTextTableName};";
+            sql = $"select count(*) from {TableNames.NewspaperFullText};";
             Int32 allCount = connection.QueryFirst<Int32>(sql);
             
             MessageBox.Show($"Обновление завершено. Загружены полные версии для {parsed} из {allCount}.");
             ProgressBarParsingNews.Value = 0;
+            _isFullNewsUpdatingNow = false;
+            ButtonUpdate.IsEnabled = true;
+            ButtonUpdate.Content = "Обновить";
+            ButtonSettings.IsEnabled = true;
         }
         public List<Newspaper> DownloadAndParseRSS(List<NewsSource> newsSources)
         {
@@ -228,7 +235,7 @@ namespace second_course
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine(source.s_rss_link + " ## " + ex.Message);
+                    Console.WriteLine( "rss get error: " + source.s_rss_link + " ## " + ex.Message);
                     continue;
                 }
 
@@ -248,18 +255,35 @@ namespace second_course
                 using (XmlReader reader = XmlReader.Create(new StringReader(sr.ReadToEnd())))
                 {
                     var formatter = new Rss20FeedFormatter();
-                    formatter.ReadFrom(reader);
+                    try
+                    {
+                        formatter.ReadFrom(reader);
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine("error in rss parsing: " + ex.Message);
+                        continue;
+                    }
                     foreach (SyndicationItem syndItem in formatter.Feed.Items)
                     {
                         Newspaper np = new Newspaper();
-                        np.i_thematic_id = GetThematicID(syndItem.Categories.Count != 0 ? syndItem.Categories.First().Name : "-");
-                        np.s_header = syndItem.Title.Text;
-                        np.s_description = syndItem.Summary?.Text;
-                        np.s_date = syndItem.PublishDate.DateTime.ToString();
-                        np.i_source_id = source.id;
-                        np.s_link = syndItem.Links[0].Uri.ToString();
-                        np.i_is_read = false;
-                        news.Add(np);
+
+                        try
+                        {
+                            np.i_thematic_id = DataBase.GetThematicID(syndItem.Categories.Count != 0 ?
+                                syndItem.Categories.First().Name : "-");
+                            np.s_header = syndItem.Title.Text.Replace("'", "");
+                            np.s_description = syndItem.Summary?.Text.Replace("'", "");
+                            np.s_date = syndItem.PublishDate.DateTime.ToString();
+                            np.i_source_id = source.id;
+                            np.s_link = syndItem.Links[0].Uri.ToString();
+                            np.i_is_read = false;
+                            news.Add(np);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine("np (rss updating) parsing error ");
+                        }
                     }
                 }
 
@@ -268,140 +292,153 @@ namespace second_course
             
             return news;
         }
-        private Int32 GetThematicID(String thematicName)
-        {
-            SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
-            String sql = String.Format("select id from thematic where s_name = '{0}'", thematicName);
-            Int32 res = -1;
-
-            try
-            {
-                res = connection.QueryFirst<Int32>(sql);
-            }
-            catch
-            {
-                String sqlInsert = String.Format("insert into thematic (s_name) values ('{0}')", thematicName);
-                connection.Execute(sqlInsert);
-                res = connection.QueryFirst<Int32>(sql);
-
-            }
-
-            return res;
-        }
         public void Worker_RSSUpdateDoWork(object sender, DoWorkEventArgs e) // выполняется загрузка и слияние текущего и нового списков новостей
         {
             List<NewsSource> newsSources = DataBase.LoadNewsSources();
             List<Newspaper> loadedNews = DownloadAndParseRSS(newsSources);
-            
+
             e.Result = loadedNews;
         }
         public void Worker_RSSUpdateFinished(object sender, RunWorkerCompletedEventArgs e)
         {
-            var loadedNews = e.Result as List<Newspaper>;
-            
-            List<Newspaper> newspapers = GetHeadersSourceList();
+            List<Newspaper> loadedNews = e.Result as List<Newspaper>;
 
-            SetHeadersSourceList(null); // костыль. Надеюсь там не по ссылке присвоение идёт, чтобы массив не обнулять
-
-            foreach (Newspaper loadedNew in loadedNews)
+            if (loadedNews.Count < 1)
             {
-                Boolean isExist = false;
-                foreach (Newspaper newpaper in newspapers)
+                MessageBox.Show("Отсутствует интернет-соединение.");
+            }
+            else
+            {
+                foreach (Newspaper np in loadedNews)
                 {
-                    if (loadedNew.s_link == newpaper.s_link) // ищем, есть ли этот элемент в текущем списке новостей
-                    {
-                        isExist = true;
-                        break;
-                    }
+                    DataBase.SaveNewspaper(np);
                 }
-
-                if (!isExist)
-                {
-                    if (DataBase.SaveNewspaper(loadedNew))
-                    {
-                        newspapers.Add(loadedNew);
-                    }
-                }
+                
+                List<Newspaper> newsToDisplay = DataBase.LoadSelectedNewspapers();
+                DataBase.FillSourceNames(newsToDisplay);
+                
+                SetHeadersSourceList(newsToDisplay);
+                _loadFullNewsWorker.RunWorkerAsync();
+                _isFullNewsUpdatingNow = true;
             }
 
-            DataBase.FillSourceNames(newspapers);
-
-            SetHeadersSourceList(newspapers);
-            _loadFullNewsWorker.RunWorkerAsync(newspapers);
-            Button666.IsEnabled = true;
+            ButtonUpdate.IsEnabled = true;
         }
-        private string BuildFullTextView(String fullText, String link)
+        private void BuildFullTextView(Newspaper np)
         {
-            GridTest.Children.Clear();
+            GridScrollView.Children.Clear();
             
-            HtmlDocument doc = new HtmlDocument();
-            doc.LoadHtml(fullText);
-            string res = "";
+            SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
+            String sql = $"select s_text from {TableNames.NewspaperFullText} " +
+                         $"where id={np.id}";
+            string fullText = "";
             try
             {
-                res = doc.DocumentNode.InnerText.Trim();
-                //res = doc.DocumentNode.SelectSingleNode("//div[@class='news-detail-text']").InnerText.Trim();
+                fullText = connection.QueryFirst<String>(sql);
             }
-            catch
-            {}
-            
-            
-            /*
-            try
+            catch (Exception ex)
             {
-                List<HtmlAttribute> tttt =
-                    doc.DocumentNode.SelectSingleNode("//img").Attributes.AttributesWithName("src").ToList();
-
-                foreach (HtmlAttribute attribute in tttt)
-                {
-                    //MessageBox.Show(attribute.Name + " " + attribute.Value);
-                }
+                Console.WriteLine("full text loading error, np id=" + np.id);    
             }
-            catch
-            {
 
-            }
-            */
-            
-            // TODO в цикле выделение всех блоков. Если это блок текста, то выделяется текст и создаётся текстблок, если картинка -- картинка создаётся и загружается
-            
-            GridTest.RowDefinitions.Add(new RowDefinition());
-            GridTest.VerticalAlignment = VerticalAlignment.Top;
+            String thematic = connection.QueryFirst<String>(
+                    $"select s_name from {TableNames.Thematic} where id={np.i_thematic_id}");
+           
+            GridScrollView.RowDefinitions.Add(new RowDefinition());
+            GridScrollView.VerticalAlignment = VerticalAlignment.Top;
             var tb = new TextBlock();
             
             tb.Inlines.Clear();
             Hyperlink hyperLink = new Hyperlink()
             {
-                NavigateUri = new Uri(link)
+                NavigateUri = new Uri(np.s_link)
             };
             hyperLink.RequestNavigate += Hyperlink_RequestNavigate;
             hyperLink.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#d9d9d9"));
             hyperLink.Inlines.Add(new Run("Открыть в браузере") { FontWeight = FontWeights.Normal });
             tb.Inlines.Add(hyperLink);
             tb.FontSize = 20;
-            GridTest.Children.Add(tb);
-            Grid.SetRow(tb, GridTest.RowDefinitions.Count - 1);
+            tb.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#d9d9d9"));
+            GridScrollView.Children.Add(tb);
+            Grid.SetRow(tb, GridScrollView.RowDefinitions.Count - 1);
+            Grid.SetColumnSpan(tb,2);
+            
+            if (thematic != "-")
+            {
+                var tb6 = new TextBlock();
+                tb6.Text = thematic;
+                tb6.TextAlignment = TextAlignment.Right;
+                tb6.FontSize = 20;
+                tb6.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#d9d9d9"));
+                GridScrollView.Children.Add(tb6);
+                Grid.SetRow(tb6, GridScrollView.RowDefinitions.Count - 1);
+                Grid.SetColumn(tb6, 1);
+            }
+            
+            GridScrollView.RowDefinitions.Add(new RowDefinition());
+            var rect = new System.Windows.Shapes.Rectangle();
+            rect.Height = 1;
+            rect.Fill = Brushes.Gray;
+            GridScrollView.Children.Add(rect);
+            Grid.SetRow(rect, GridScrollView.RowDefinitions.Count - 1);
+            Grid.SetColumnSpan(rect, 2);
 
-            GridTest.RowDefinitions.Add(new RowDefinition());
+
+            GridScrollView.RowDefinitions.Add(new RowDefinition());
+            var tb3 = new TextBlock();
+            tb3.Text = "\n" + np.s_header + "\n";
+            tb3.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#f5f5f5"));
+            tb3.TextWrapping = TextWrapping.Wrap;
+            tb3.FontWeight = FontWeights.Bold;
+            tb3.FontSize = 28;
+            GridScrollView.Children.Add(tb3);
+            Grid.SetRow(tb3, GridScrollView.RowDefinitions.Count - 1);
+            Grid.SetColumnSpan(tb3, 2);
+
+
+            GridScrollView.RowDefinitions.Add(new RowDefinition());
             var tb2 = new TextBlock();
-            tb2.Text = res;
+            tb2.Text = fullText.Length == 0 ? np.s_description : fullText;
             tb2.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#f5f5f5"));
             tb2.TextWrapping = TextWrapping.Wrap;
             tb2.FontSize = 20;
+            GridScrollView.Children.Add(tb2);
+            Grid.SetRow(tb2, GridScrollView.RowDefinitions.Count - 1);
+            Grid.SetColumnSpan(tb2,2);
 
-            GridTest.Children.Add(tb2);
-            Grid.SetRow(tb2, GridTest.RowDefinitions.Count - 1);
 
-            return "";
+            SQLiteConnection conn = DatabaseConnectionHandler.Invoke();
+
+            sql = $"select i_local_address_id from " +
+                  $"{TableNames.Images} where i_newspaper_id={np.id}";
+            List<int> localAddressIds = conn.Query<int>(sql).ToList();
+            
+            foreach (int localAddressId in localAddressIds) // загрузка всех картинок 
+            {
+                sql = $"select s_path from {TableNames.LocalFileAddress} where id={localAddressId};";
+                string localPath = conn.QueryFirst<string>(sql);
+                var img = new System.Windows.Controls.Image();
+
+                try
+                {
+                    img.Source = new BitmapImage(new Uri(Directory.GetCurrentDirectory() + "\\" + localPath));
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"error in image loading: {localPath} // {ex.Message}");
+                    continue;
+                }
+                
+                GridScrollView.RowDefinitions.Add(new RowDefinition());
+                GridScrollView.Children.Add(img);
+                Grid.SetRow(img, GridScrollView.RowDefinitions.Count - 1);
+                Grid.SetColumnSpan(img, 2);
+            }
         }
         private void Hyperlink_RequestNavigate(object sender, RequestNavigateEventArgs e)
         {
             Process.Start(new ProcessStartInfo(e.Uri.AbsoluteUri));
             e.Handled = true;
-        }
-        public List<Newspaper> GetHeadersSourceList()
-        {
-            return ListBoxNewHeaders.ItemsSource as List<Newspaper>;
         }
         public void SetHeadersSourceList(List<Newspaper> news)
         {
@@ -426,49 +463,65 @@ namespace second_course
             if (e.AddedItems.Count > 0)
             {
                 Newspaper selectedItem = (Newspaper) e.AddedItems[0];
-                //TextBlockNewText.Text = selectedItem.s_full_text;
                 SQLiteConnection connection = DatabaseConnectionHandler.Invoke();
-                String sql = $"select s_text from {Consts.FullTextTableName} where id={selectedItem.id}";
-                string fullText = "";
-                try
-                {
-                    fullText = connection.QueryFirst<String>(sql);
-                }
-                catch (Exception ee)
-                {}
-                
-                BuildFullTextView(fullText.Length == 0? selectedItem.s_description : fullText, selectedItem.s_link);
+
+                BuildFullTextView(selectedItem);
                 
                 selectedItem.i_is_read = true;
-                sql = $"update {Consts.NewsTableName} set i_is_read=1 where id={selectedItem.id}";
+                string sql = $"update {TableNames.Newspapers} set " +
+                             $"i_is_read=1 where id={selectedItem.id}";
                 connection.Execute(sql);
             }
         }
-        private void SettingsButton_OnMouseDown(object sender, MouseButtonEventArgs e)
-        {
-            SettingsWindow sw = new SettingsWindow();
-            sw.ShowDialog();
-            
-            SetHeadersSourceList(DataBase.LoadNewspapers());
-        }
         private void TextBoxSearch_OnTextChanged(object sender, TextChangedEventArgs e)
         {
-            if (ListBoxNewHeaders.ItemsSource != null)
+            if (ListBoxNewHeaders.ItemsSource != null && !_searchFieldWaterMarkActive)
             {
-                if (TextBoxSearch.Text.IsNullOrWhiteSpace())
-                {
-                    SetHeadersSourceList(_newspapers);
-                }
-
-                if (!_searchFieldWaterMarkActive)
-                    SetHeadersSourceList(Search.SearchByQuery(GetHeadersSourceList(), TextBoxSearch.Text.Trim()));
+                SetHeadersSourceList(Search.SearchByQuery(_newspapers, TextBoxSearch.Text.Trim()));
             }
         }
         private void Button_OnClick(object sender, RoutedEventArgs e)
         {
-            Button666.IsEnabled = false;
-            _loadFullNewsWorker.CancelAsync(); // останавливаем выполнение фонового парсинга
-            _updateRSSWorker.RunWorkerAsync();
+            if (!_isFullNewsUpdatingNow)
+            {
+                ButtonSettings.IsEnabled = false;
+                ButtonUpdate.IsEnabled = false;
+                _loadFullNewsWorker.CancelAsync(); // останавливаем выполнение фонового парсинга
+                _updateRSSWorker.RunWorkerAsync();
+                ButtonUpdate.Content = "Остановить обновление";
+            }
+            else
+            {
+                _loadFullNewsWorker.CancelAsync();
+                ButtonUpdate.IsEnabled = false;
+                ButtonUpdate.Content = "Выполняется остановка...";
+            }
+        }
+
+        private void ButtonMinimize_OnMouseDown(object sender, MouseButtonEventArgs e)
+        {
+            WindowState = WindowState.Minimized;
+        }
+
+        private void ButtonSettings_OnClick(object sender, RoutedEventArgs e)
+        {
+            if (!_isFullNewsUpdatingNow)
+            {
+            SettingsWindow sw = new SettingsWindow();
+            sw.ShowInTaskbar = true;
+            sw.ShowDialog();
+
+            _newspapers = DataBase.LoadSelectedNewspapers();
+            SetHeadersSourceList(_newspapers);
+            
+            this._searchFieldWaterMarkActive = true;
+            this.TextBoxSearch.Text = "Введите искомые слова";
+            this.TextBoxSearch.Foreground = (SolidColorBrush)(new BrushConverter().ConvertFrom("#A1A1A1"));
+            }
+            else
+            {
+                MessageBox.Show("Пожалуйста, дождитесь завершения обновления или прервите его.");
+            }
         }
     }
 }
